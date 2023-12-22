@@ -33,18 +33,21 @@ class Delaunay2D:
                        center+radius*np.array((-1, +1))]
 
         # Create two dicts to store triangle neighbours and circumcircles.
-        self.triangles = {}
-        self.circles = {}
+        self.triangles = {} # self.triangles[ triangle ] =  (neighbor triangle 1, 
+                                                        #    neighbor triangle 2, 
+                                                        #    neighbor triangle 3)
+                            # where a "triangle" is a 3-sized tuple of the global indices of the triangle's vertices (indices of positions of vertices in self.coords)
+        self.circles = {} # self.circles [ circle] = 2-sized tuple = (center of circle, squared radius of circle)
 
         # Create two CCW triangles for the frame
-        T1 = (0, 1, 3)
+        T1 = (0, 1, 3) # T1[i] = global index of T1's i-th vertex in self.coords
         T2 = (2, 3, 1)
         self.triangles[T1] = [T2, None, None]
         self.triangles[T2] = [T1, None, None]
 
         # Compute circumcenters and circumradius for each triangle
         for t in self.triangles:
-            self.circles[t] = self.circumcenter(t)
+            self.circles[t] = self.circumcenter(t) # observe that self.circles and self.triangles have the same keys
 
     def circumcenter(self, tri):
         """Compute circumcenter and circumradius of a triangle in 2D.
@@ -64,14 +67,14 @@ class Delaunay2D:
         center = np.dot(bary_coords, pts)
 
         # radius = np.linalg.norm(pts[0] - center) # euclidean distance
-        radius = np.sum(np.square(pts[0] - center))  # squared distance
-        return (center, radius)
+        radius_squared = np.sum(np.square(pts[0] - center))  # squared distance
+        return (center, radius_squared)
 
     def inCircleFast(self, tri, p):
         """Check if point p is inside of precomputed circumcircle of tri.
         """
-        center, radius = self.circles[tri]
-        return np.sum(np.square(center - p)) <= radius
+        center, radius_squared = self.circles[tri]
+        return np.sum(np.square(center - p)) <= radius_squared
 
     def inCircleRobust(self, tri, p):
         """Check if point p is inside of circumcircle around the triangle tri.
@@ -83,7 +86,7 @@ class Delaunay2D:
         m = np.hstack((m1, m2))    # The 3x3 matrix to check
         return np.linalg.det(m) <= 0
 
-    def addPoint(self, p):
+    def addPoint(self, p): # after reviewing this function on 4/3/22, I believe it is a faithful exact replica of the Bowyer-Watson algorithm shown in the Wikipedia page on my GoodNotes (https://en.wikipedia.org/wiki/Bowyer–Watson_algorithm)
         """Add a point to the current DT, and refine it using Bowyer-Watson.
         """
         p = np.asarray(p)
@@ -109,13 +112,13 @@ class Delaunay2D:
         while True:
             # Check if edge of triangle T is on the boundary...
             # if opposite triangle of this edge is external to the list
-            tri_op = self.triangles[T][edge]
+            tri_op = self.triangles[T][edge] # "tri_op" stands for opposite triangle
             if tri_op not in bad_triangles:
                 # Insert edge and external triangle into boundary list
-                boundary.append((T[(edge+1) % 3], T[(edge-1) % 3], tri_op))
+                boundary.append((T[(edge+1) % 3], T[(edge-1) % 3], tri_op)) # "edge" is the index of the vertex on T that is not shared with tri_op; therefore, to the get the vertices actually comprising the edge shared by T and tri_op, we use "(edge+1) % 3" and "(edge-1) % 3"
 
                 # Move to next CCW edge in this triangle
-                edge = (edge + 1) % 3
+                edge = (edge + 1) % 3 # this next edge will correspond to a triangle that IS in bad_triangles
 
                 # Check if boundary is a closed loop
                 if boundary[0][0] == boundary[-1][1]:
@@ -132,7 +135,7 @@ class Delaunay2D:
 
         # Retriangle the hole left by bad_triangles
         new_triangles = []
-        for (e0, e1, tri_op) in boundary:
+        for (e0, e1, tri_op) in boundary: # e0 and e1 are the vertices of the edge of tri_op that lie on the polygonal, star-shaped boundary
             # Create a new triangle using point p and edge extremes
             T = (idx, e0, e1)
 
@@ -142,12 +145,12 @@ class Delaunay2D:
             # Set opposite triangle of the edge as neighbour of T
             self.triangles[T] = [tri_op, None, None]
 
-            # Try to set T as neighbour of the opposite triangle
-            if tri_op:
+            # Try to set T as neighbour of tri_op
+            if tri_op: # when is tri_op None???
                 # search the neighbour of tri_op that use edge (e1, e0)
-                for i, neigh in enumerate(self.triangles[tri_op]):
-                    if neigh:
-                        if e1 in neigh and e0 in neigh:
+                for i, neighboring_tri in enumerate(self.triangles[tri_op]):
+                    if neighboring_tri:
+                        if e1 in neighboring_tri and e0 in neighboring_tri:
                             # change link to use our new triangle
                             self.triangles[tri_op][i] = T
 
@@ -155,7 +158,7 @@ class Delaunay2D:
             new_triangles.append(T)
 
         # Link the new triangles each another
-        N = len(new_triangles)
+        N = len(new_triangles) # based on the above "while True:" loop used to create "boundary", I believe that new_triangles consists of a list of triangles already patterned in CCW order
         for i, T in enumerate(new_triangles):
             self.triangles[T][1] = new_triangles[(i+1) % N]   # next
             self.triangles[T][2] = new_triangles[(i-1) % N]   # previous
@@ -165,7 +168,7 @@ class Delaunay2D:
         """
         # Filter out triangles with any vertex in the extended BBox
         return [(a-4, b-4, c-4)
-                for (a, b, c) in self.triangles if a > 3 and b > 3 and c > 3]
+                for (a, b, c) in self.triangles if a > 3 and b > 3 and c > 3] # need a > 3 because recall that self.triangles store the global indices of the vertices in self.coords and recall that the first 4 vertices in self.coords are the vertices of the bounding box (the bounding "big triangle" essentially), as defined in the __init__() function
 
     def exportCircles(self):
         """Export the circumcircles as a list of (center, radius)
@@ -195,7 +198,7 @@ class Delaunay2D:
         """
         return self.coords, list(self.triangles)
 
-    def exportVoronoiRegions(self):
+    def exportVoronoiRegions(self): last here
         """Export coordinates and regions of Voronoi diagram as indexed data.
         """
         # Remember to compute circumcircles if not done before
